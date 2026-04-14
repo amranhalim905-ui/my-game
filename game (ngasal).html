@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Love Block 💖</title>
+
+<style>
+body{
+    margin:0;
+    background:linear-gradient(135deg,#89f7fe,#66a6ff);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    font-family:sans-serif;
+    overflow:hidden;
+}
+
+#score{
+    color:white;
+    margin:10px;
+    font-size:20px;
+}
+
+/* GRID */
+#grid{
+    display:grid;
+    grid-template-columns:repeat(8,40px);
+    gap:4px;
+}
+
+.cell{
+    width:40px;
+    height:40px;
+    background:rgba(255,255,255,0.2);
+}
+
+.filled{
+    background:#ff6ec7;
+}
+
+/* OPTIONS */
+#options{
+    margin-top:20px;
+    display:flex;
+    gap:20px;
+}
+
+.block{
+    display:grid;
+    gap:3px;
+}
+
+.block div{
+    width:25px;
+    height:25px;
+    background:#ff6ec7;
+}
+
+/* DRAG */
+.dragging{
+    position:fixed;
+    pointer-events:none;
+    z-index:1000;
+}
+
+/* EXPLOSION */
+.particle{
+    position:absolute;
+    width:6px;
+    height:6px;
+    border-radius:50%;
+    background:#ff6ec7;
+    animation:explode 0.6s forwards;
+}
+
+@keyframes explode{
+    to{
+        transform:translate(var(--x),var(--y));
+        opacity:0;
+    }
+}
+
+/* RESULT */
+#result{
+    position:fixed;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    text-align:center;
+    display:none;
+}
+
+/* 🤍 WHITE GLOW WIN TEXT */
+#result h2{
+    font-size:32px;
+    color:white;
+    text-shadow:
+        0 0 8px #ffffff,
+        0 0 15px #ffffff,
+        0 0 25px #ff9de6,
+        0 0 40px #ff6ec7;
+
+    animation: popIn 1s ease, glowPulse 2s infinite;
+}
+
+@keyframes popIn{
+    from{opacity:0; transform:scale(0.5);}
+    to{opacity:1; transform:scale(1);}
+}
+
+@keyframes glowPulse{
+    0%,100%{
+        text-shadow:
+            0 0 8px #ffffff,
+            0 0 15px #ffffff,
+            0 0 25px #ff9de6;
+    }
+    50%{
+        text-shadow:
+            0 0 15px #ffffff,
+            0 0 30px #ff9de6,
+            0 0 50px #ff6ec7;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div id="score">Score: 0</div>
+<div id="grid"></div>
+<div id="options"></div>
+<div id="result"></div>
+
+<script>
+let cols=8, rows=10;
+let grid=[];
+let score=0;
+
+let currentShape=null;
+let dragEl=null;
+let activeBlocks=[];
+
+let shapes=[
+    [[1]],
+    [[1,1]],
+    [[1],[1]],
+    [[1,1],[1,1]],
+    [[1,1,1]],
+    [[1],[1],[1]],
+    [[1,0],[1,1]],
+    [[0,1],[1,1]],
+    [[1,1,1],[0,1,0]]
+];
+
+let gridEl=document.getElementById("grid");
+
+/* GRID */
+for(let i=0;i<rows*cols;i++){
+    let c=document.createElement("div");
+    c.className="cell";
+    gridEl.appendChild(c);
+    grid.push(c);
+}
+
+/* GENERATE */
+function generateBlocks(){
+    activeBlocks=[];
+    for(let i=0;i<3;i++){
+        activeBlocks.push(shapes[Math.floor(Math.random()*shapes.length)]);
+    }
+    renderBlocks();
+}
+
+function renderBlocks(){
+    let opt=document.getElementById("options");
+    opt.innerHTML="";
+
+    activeBlocks.forEach((shape,index)=>{
+        let b=document.createElement("div");
+        b.className="block";
+        b.style.gridTemplateColumns=`repeat(${shape[0].length},25px)`;
+
+        shape.forEach(row=>{
+            row.forEach(cell=>{
+                let d=document.createElement("div");
+                if(!cell) d.style.visibility="hidden";
+                b.appendChild(d);
+            });
+        });
+
+        b.addEventListener("touchstart",()=>{
+            currentShape=shape;
+            currentIndex=index;
+
+            dragEl=b.cloneNode(true);
+            dragEl.classList.add("dragging");
+            document.body.appendChild(dragEl);
+        });
+
+        opt.appendChild(b);
+    });
+}
+
+/* MOVE */
+document.addEventListener("touchmove",(e)=>{
+    if(!dragEl) return;
+    dragEl.style.left=e.touches[0].clientX+"px";
+    dragEl.style.top=e.touches[0].clientY+"px";
+});
+
+/* DROP */
+document.addEventListener("touchend",(e)=>{
+    if(!dragEl) return;
+
+    let t=e.changedTouches[0];
+    let el=document.elementFromPoint(t.clientX,t.clientY);
+
+    if(el && el.classList.contains("cell")){
+        let index=grid.indexOf(el);
+        let col=index%cols;
+        let row=Math.floor(index/cols);
+
+        if(canPlace(row,col,currentShape)){
+            place(row,col,currentShape);
+            activeBlocks.splice(currentIndex,1);
+            checkLines();
+
+            if(activeBlocks.length===0){
+                generateBlocks();
+            }else{
+                renderBlocks();
+            }
+        }
+    }
+
+    dragEl.remove();
+    dragEl=null;
+});
+
+/* CHECK */
+function canPlace(r,c,shape){
+    for(let i=0;i<shape.length;i++){
+        for(let j=0;j<shape[i].length;j++){
+            if(shape[i][j]){
+                let nr=r+i;
+                let nc=c+j;
+                if(nr>=rows||nc>=cols) return false;
+                if(grid[nr*cols+nc].classList.contains("filled")) return false;
+            }
+        }
+    }
+    return true;
+}
+
+/* PLACE */
+function place(r,c,shape){
+    for(let i=0;i<shape.length;i++){
+        for(let j=0;j<shape[i].length;j++){
+            if(shape[i][j]){
+                grid[(r+i)*cols+(c+j)].classList.add("filled");
+            }
+        }
+    }
+}
+
+/* LINE */
+function checkLines(){
+    for(let r=0;r<rows;r++){
+        let full=true;
+        for(let c=0;c<cols;c++){
+            if(!grid[r*cols+c].classList.contains("filled")) full=false;
+        }
+
+        if(full){
+            explodeLine(r);
+            for(let c=0;c<cols;c++){
+                grid[r*cols+c].classList.remove("filled");
+            }
+            score+=50;
+        }
+    }
+
+    document.getElementById("score").innerText="Score: "+score;
+
+    if(score>=1000) win();
+}
+
+/* EXPLOSION */
+function explodeLine(row){
+    for(let c=0;c<cols;c++){
+        let rect=grid[row*cols+c].getBoundingClientRect();
+        for(let i=0;i<6;i++){
+            let p=document.createElement("div");
+            p.className="particle";
+            p.style.left=rect.left+"px";
+            p.style.top=rect.top+"px";
+
+            let a=Math.random()*Math.PI*2;
+            let d=Math.random()*60;
+
+            p.style.setProperty("--x",Math.cos(a)*d+"px");
+            p.style.setProperty("--y",Math.sin(a)*d+"px");
+
+            document.body.appendChild(p);
+            setTimeout(()=>p.remove(),600);
+        }
+    }
+}
+
+/* WIN */
+function win(){
+    let r=document.getElementById("result");
+    r.style.display="block";
+
+    r.innerHTML="<h2>🏆💖 Selamat... kamu jadi pacar aku 💖🏆</h2>";
+}
+
+/* START */
+generateBlocks();
+</script>
+
+</body>
+</html>
